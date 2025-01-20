@@ -12,11 +12,6 @@ from langgraph.graph import END
 from langgraph.prebuilt import create_react_agent
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-tools = [TavilySearchResults(max_results=3)]
-
-# Initialize agent_executor
-agent_executor = create_react_agent(llm, tools, state_modifier=prompt)
-
 class PlanExecute(TypedDict):
     input: str
     plan: List[str]
@@ -39,6 +34,10 @@ class Act(BaseModel):
         description="Action to perform. If you want to respond to user, use Response. "
         "If you need to further use tools to get the answer, use Plan."
     )
+
+# Initialize tools, LLM, and prompts
+tools = [TavilySearchResults(max_results=3)]
+llm = ChatOpenAI(model="gpt-4o-mini-2024-07-18")
 
 # Define prompts
 planner_prompt = ChatPromptTemplate.from_messages(
@@ -69,6 +68,19 @@ You have currently done the follow steps:
 
 Update your plan accordingly. If no more steps are needed and you can return to the user, then respond with that. Otherwise, fill out the plan. Only add steps to the plan that still NEED to be done. Do not return previously done steps as part of the plan."""
 )
+
+# Get the agent prompt and create agent_executor
+prompt = hub.pull("ih/ih-react-agent-executor")
+agent_executor = create_react_agent(llm, tools, state_modifier=prompt)
+
+# Initialize planner and replanner
+planner = planner_prompt | ChatOpenAI(
+    model="gpt-4o-mini-2024-07-18", temperature=0
+).with_structured_output(Plan)
+
+replanner = replanner_prompt | ChatOpenAI(
+    model="gpt-4o-mini-2024-07-18", temperature=0
+).with_structured_output(Act)
 
 async def execute_step(state: PlanExecute):
     """Execute a single step in the plan."""
